@@ -6,9 +6,20 @@ from pydantic import BaseModel, Field, ConfigDict
 from app.models import LedgerOperation
 
 
+# --- Auth Schemas ---
+class UserAuth(BaseModel):
+    username: str = Field(..., min_length=3, max_length=50, description="Username")
+    password: str = Field(..., min_length=4, max_length=100, description="Password")
+
+
+class TokenResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+
+
 # --- Wallet Schemas ---
 class WalletCreate(BaseModel):
-    user_id: str = Field(..., min_length=1, max_length=100, description="Unique user identifier")
+    user_id: Optional[str] = Field(None, max_length=100, description="Optional user_id (defaults to authenticated user)")
     currency: Optional[str] = Field("USD", min_length=3, max_length=10, description="Currency code (e.g. USD)")
 
 

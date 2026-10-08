@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from app.database import engine, Base
 import app.models
-from app.routes import router as wallet_router
+from app.routes import router as wallet_router, auth_router
 
 # Auto-create tables on startup
 Base.metadata.create_all(bind=engine)
@@ -9,4 +9,5 @@ Base.metadata.create_all(bind=engine)
 app = FastAPI()
 
 # Register routes
+app.include_router(auth_router)
 app.include_router(wallet_router)
