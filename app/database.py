@@ -1,16 +1,19 @@
 from typing import Generator
 from sqlalchemy import create_engine
 from sqlalchemy.orm import declarative_base, sessionmaker, Session
-from app.config import settings
+from app.config import DATABASE_URL
 
-# Standard synchronous SQLAlchemy engine
+# SQLAlchemy engine
 engine = create_engine(
-    settings.DATABASE_URL,
+    DATABASE_URL,
+    pool_size=25,
+    max_overflow=35,
+    pool_timeout=30,
     pool_pre_ping=True,
     echo=False,
 )
 
-# Standard synchronous session factory
+# session factory
 SessionLocal = sessionmaker(
     bind=engine,
     autocommit=False,
