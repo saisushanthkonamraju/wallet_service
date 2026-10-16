@@ -28,6 +28,7 @@ class WalletResponse(BaseModel):
     user_id: str
     balance: Decimal
     currency: str
+    version: int
     created_at: datetime
     updated_at: datetime
 
@@ -39,6 +40,7 @@ class WalletBalanceResponse(BaseModel):
     user_id: str
     balance: Decimal
     currency: str
+    version: int
     updated_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
@@ -57,6 +59,7 @@ class LedgerEntryResponse(BaseModel):
     amount: Decimal
     balance_after: Decimal
     description: Optional[str]
+    idempotency_key: Optional[str] = None
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)

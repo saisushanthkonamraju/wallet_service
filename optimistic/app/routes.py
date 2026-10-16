@@ -1,6 +1,6 @@
 import uuid
 from typing import Annotated, List
-from fastapi import APIRouter, Depends, Query, HTTPException, status
+from fastapi import APIRouter, Depends, Query, Header, HTTPException, status
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.auth import get_current_user
@@ -96,11 +96,18 @@ def get_wallet_by_user(user_id: str, db: DBDep, current_user: UserDep):
     status_code=status.HTTP_200_OK,
     summary="2. Credit money to wallet",
 )
-def credit_wallet(wallet_id: uuid.UUID, payload: TransactionRequest, db: DBDep, current_user: UserDep):
+def credit_wallet(
+    wallet_id: uuid.UUID,
+    payload: TransactionRequest,
+    db: DBDep,
+    current_user: UserDep,
+    idempotency_key: Annotated[str | None, Header(alias="Idempotency-Key")] = None,
+):
     """
-    Credits money to the wallet.
+    Credits money to the wallet using Optimistic Concurrency Control.
     Enforces authorization: user can only credit their own wallet.
     Atomically updates wallet balance and creates an immutable ledger entry.
+    Supports idempotency via 'Idempotency-Key' header.
     """
     _, ledger_entry = WalletService.credit_wallet(
         db,
@@ -108,6 +115,7 @@ def credit_wallet(wallet_id: uuid.UUID, payload: TransactionRequest, db: DBDep, 
         amount=payload.amount,
         current_user=current_user,
         description=payload.description,
+        idempotency_key=idempotency_key,
     )
     return ledger_entry
 
@@ -118,12 +126,19 @@ def credit_wallet(wallet_id: uuid.UUID, payload: TransactionRequest, db: DBDep, 
     status_code=status.HTTP_200_OK,
     summary="3. Debit money from wallet",
 )
-def debit_wallet(wallet_id: uuid.UUID, payload: TransactionRequest, db: DBDep, current_user: UserDep):
+def debit_wallet(
+    wallet_id: uuid.UUID,
+    payload: TransactionRequest,
+    db: DBDep,
+    current_user: UserDep,
+    idempotency_key: Annotated[str | None, Header(alias="Idempotency-Key")] = None,
+):
     """
-    Debits money from the wallet.
+    Debits money from the wallet using Optimistic Concurrency Control.
     Enforces authorization: user can only debit their own wallet.
-    Guarantees balance will never go negative using row-locking and DB check constraints.
+    Guarantees balance will never go negative using version checking and DB check constraints.
     Atomically updates wallet balance and creates an immutable ledger entry.
+    Supports idempotency via 'Idempotency-Key' header.
     """
     _, ledger_entry = WalletService.debit_wallet(
         db,
@@ -131,6 +146,7 @@ def debit_wallet(wallet_id: uuid.UUID, payload: TransactionRequest, db: DBDep, c
         amount=payload.amount,
         current_user=current_user,
         description=payload.description,
+        idempotency_key=idempotency_key,
     )
     return ledger_entry
 
@@ -151,6 +167,7 @@ def get_wallet_balance(wallet_id: uuid.UUID, db: DBDep, current_user: UserDep):
         user_id=wallet.user_id,
         balance=wallet.balance,
         currency=wallet.currency,
+        version=wallet.version,
         updated_at=wallet.updated_at,
     )
 

@@ -3,6 +3,7 @@ from decimal import Decimal
 from typing import List, Tuple
 from sqlalchemy.orm import Session
 from sqlalchemy import func
+from sqlalchemy.exc import IntegrityError
 from fastapi import HTTPException, status
 from app.models import Wallet, LedgerEntry, LedgerOperation, User
 from app.auth import hash_password, verify_password, create_access_token
@@ -119,11 +120,13 @@ class WalletService:
         amount: Decimal,
         current_user: str,
         description: str | None = None,
+        idempotency_key: str | None = None,
     ) -> Tuple[Wallet, LedgerEntry]:
         """
         2. Credit money to wallet.
         Enforces ownership check.
         Atomically updates wallet balance and creates an immutable ledger entry.
+        Supports idempotency: returns existing receipt without double-crediting.
         Uses pessimistic row-level locking (with_for_update).
         """
         if amount <= 0:
@@ -131,6 +134,24 @@ class WalletService:
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Credit amount must be strictly greater than 0",
             )
+
+        # Idempotency pre-check
+        if idempotency_key:
+            existing = db.query(LedgerEntry).filter(LedgerEntry.idempotency_key == idempotency_key).first()
+            if existing:
+                if existing.wallet_id != wallet_id:
+                    raise HTTPException(
+                        status_code=status.HTTP_409_CONFLICT,
+                        detail=f"Idempotency key '{idempotency_key}' already used for a different wallet",
+                    )
+                wallet = db.query(Wallet).filter(Wallet.id == wallet_id).first()
+                if not wallet:
+                    raise HTTPException(
+                        status_code=status.HTTP_404_NOT_FOUND,
+                        detail=f"Wallet with id '{wallet_id}' not found",
+                    )
+                WalletService._verify_ownership(wallet, current_user)
+                return wallet, existing
 
         try:
             # Row lock to prevent race conditions
@@ -155,6 +176,7 @@ class WalletService:
                 amount=amount,
                 balance_after=new_balance,
                 description=description,
+                idempotency_key=idempotency_key,
             )
             db.add(ledger_entry)
 
@@ -165,6 +187,16 @@ class WalletService:
             return wallet, ledger_entry
         except HTTPException:
             db.rollback()
+            raise
+        except IntegrityError:
+            db.rollback()
+            if idempotency_key:
+                existing = db.query(LedgerEntry).filter(LedgerEntry.idempotency_key == idempotency_key).first()
+                if existing:
+                    wallet = db.query(Wallet).filter(Wallet.id == existing.wallet_id).first()
+                    if wallet:
+                        WalletService._verify_ownership(wallet, current_user)
+                        return wallet, existing
             raise
         except Exception:
             db.rollback()
@@ -177,11 +209,13 @@ class WalletService:
         amount: Decimal,
         current_user: str,
         description: str | None = None,
+        idempotency_key: str | None = None,
     ) -> Tuple[Wallet, LedgerEntry]:
         """
         3. Debit money from wallet.
         Enforces ownership check and Rule 2 (No negative balance).
         Atomically updates wallet balance and creates an immutable ledger entry.
+        Supports idempotency: returns existing receipt without double-debiting.
         Uses pessimistic row-level locking (with_for_update).
         """
         if amount <= 0:
@@ -189,6 +223,24 @@ class WalletService:
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Debit amount must be strictly greater than 0",
             )
+
+        # Idempotency pre-check
+        if idempotency_key:
+            existing = db.query(LedgerEntry).filter(LedgerEntry.idempotency_key == idempotency_key).first()
+            if existing:
+                if existing.wallet_id != wallet_id:
+                    raise HTTPException(
+                        status_code=status.HTTP_409_CONFLICT,
+                        detail=f"Idempotency key '{idempotency_key}' already used for a different wallet",
+                    )
+                wallet = db.query(Wallet).filter(Wallet.id == wallet_id).first()
+                if not wallet:
+                    raise HTTPException(
+                        status_code=status.HTTP_404_NOT_FOUND,
+                        detail=f"Wallet with id '{wallet_id}' not found",
+                    )
+                WalletService._verify_ownership(wallet, current_user)
+                return wallet, existing
 
         try:
             # Row lock to prevent race conditions
@@ -223,6 +275,7 @@ class WalletService:
                 amount=amount,
                 balance_after=new_balance,
                 description=description,
+                idempotency_key=idempotency_key,
             )
             db.add(ledger_entry)
 
@@ -233,6 +286,16 @@ class WalletService:
             return wallet, ledger_entry
         except HTTPException:
             db.rollback()
+            raise
+        except IntegrityError:
+            db.rollback()
+            if idempotency_key:
+                existing = db.query(LedgerEntry).filter(LedgerEntry.idempotency_key == idempotency_key).first()
+                if existing:
+                    wallet = db.query(Wallet).filter(Wallet.id == existing.wallet_id).first()
+                    if wallet:
+                        WalletService._verify_ownership(wallet, current_user)
+                        return wallet, existing
             raise
         except Exception:
             db.rollback()

@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from sqlalchemy import (
     Column,
     String,
+    Integer,
     Numeric,
     DateTime,
     ForeignKey,
@@ -41,6 +42,7 @@ class Wallet(Base):
     user_id = Column(String(100), unique=True, nullable=False, index=True)
     balance = Column(Numeric(18, 4), nullable=False, default=0.0000)
     currency = Column(String(10), nullable=False, default="USD")
+    version = Column(Integer, nullable=False, default=1)
     created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
     updated_at = Column(DateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False)
 
@@ -66,6 +68,7 @@ class LedgerEntry(Base):
     amount = Column(Numeric(18, 4), nullable=False)
     balance_after = Column(Numeric(18, 4), nullable=False)
     description = Column(String(255), nullable=True)
+    idempotency_key = Column(String(100), unique=True, nullable=True, index=True)
     created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False, index=True)
 
     # Relationships
